@@ -1,0 +1,38 @@
+{
+    "name": "ijagjeet/laravel-sso",
+    "description": "Simple PHP SSO integration for Laravel",
+    "keywords": [
+        "laravel",
+        "sso",
+        "authentication",
+        "login"
+    ],
+    "homepage": "https://github.com/ijagjeet/laravel-sso",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Jagjeet Singh",
+            "email": "talk@ijagjeet.com",
+            "homepage": "https://github.com/ijagjeet",
+            "role": "Developer"
+        }
+    ],
+    "require": {
+        "php": "^7.2.5",
+        "guzzlehttp/guzzle": "^6.0|^7.0",
+        "laravel/framework": "^5.5|^7.0|^8.0",
+        "ijagjeet/php-simple-sso": "^1.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "IJagjeet\\LaravelSSO\\": "src/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "IJagjeet\\LaravelSSO\\SSOServiceProvider"
+            ]
+        }
+    }
+}
