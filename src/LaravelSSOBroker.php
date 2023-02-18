@@ -3,27 +3,142 @@
 namespace IJagjeet\LaravelSSO;
 
 use GuzzleHttp;
+use IJagjeet\LaravelSSO\Interfaces\SSOBrokerInterface;
 use IJagjeet\LaravelSSO\Models\Broker;
 use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Str;
 use IJagjeet\LaravelSSO\Exceptions\MissingConfigurationException;
-use IJagjeet\SimpleSSO\SSOBroker;
 
 /**
  * Class SSOBroker. This class is only a skeleton.
  * First of all, you need to implement abstract functions in your own class.
  * Secondly, you should create a page which will be your SSO server.
  *
- * @package IJagjeet\SimpleSSO
+ * @package IJagjeet\LaravelSSO
  */
-class LaravelSSOBroker extends SSOBroker
+class LaravelSSOBroker implements SSOBrokerInterface
 {
+    /**
+     * SSO server url.
+     *
+     * @var string
+     */
+    protected $ssoServerUrl;
+
+    /**
+     * Broker name.
+     *
+     * @var string
+     */
+    protected $brokerName;
+
+    /**
+     * Broker secret token.
+     *
+     * @var string
+     */
+    protected $brokerSecret;
+
+    /**
+     * User info retrieved from the SSO server.
+     *
+     * @var array
+     */
+    protected $userInfo;
+
+    /**
+     * Random token generated for the client and broker.
+     *
+     * @var string|null
+     */
+    protected $token;
+
+
+    public function __construct()
+    {
+        $this->setOptions();
+        $this->saveToken();
+    }
+
+    /**
+     * Attach client session to broker session in SSO server.
+     *
+     * @return void
+     */
+    public function attach()
+    {
+        $parameters = [
+            'return_url' => $this->getCurrentUrl(),
+            'broker' => $this->brokerName,
+            'token' => $this->token,
+            'checksum' => hash('sha256', 'attach' . $this->token . $this->brokerSecret)
+        ];
+
+        $attachUrl = $this->generateCommandUrl('attach', $parameters);
+
+        $this->redirect($attachUrl);
+    }
+
+    /**
+     * Getting user info from SSO based on client session.
+     *
+     * @return array
+     */
+    public function getUserInfo()
+    {
+        if (!isset($this->userInfo) || empty($this->userInfo)) {
+            $this->userInfo = $this->makeRequest('GET', 'userInfo');
+        }
+
+        return $this->userInfo;
+    }
+
+    /**
+     * Login client to SSO server with user credentials.
+     *
+     * @param string $username
+     * @param string $password
+     *
+     * @return bool
+     */
+    public function login(string $username, string $password)
+    {
+        $this->userInfo = $this->makeRequest('POST', 'login', compact('username', 'password'));
+
+        if (!isset($this->userInfo['error']) && isset($this->userInfo['data']['id'])) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Logout client from SSO server.
+     *
+     * @return void
+     */
+    public function logout()
+    {
+        $this->makeRequest('POST', 'logout');
+    }
+
+    /**
+     * Generate session key with broker name, broker secret and unique client token.
+     *
+     * @return string
+     */
+    protected function getSessionId()
+    {
+        $checksum = hash('sha256', 'session' . $this->token . $this->brokerSecret);
+        return "SSO-{$this->brokerName}-{$this->token}-$checksum";
+    }
+
     /**
      * Generate request url.
      *
-     * @param string $command
-     * @param array $parameters
-     *
+     * @param  string  $command
+     * @param  array  $parameters
+     * @param  null  $url
      * @return string
      */
     protected function generateCommandUrl(string $command, array $parameters = [], $url = null)
@@ -92,8 +207,9 @@ class LaravelSSOBroker extends SSOBroker
     /**
      * Register client to SSO server with user credentials.
      *
-     * @param array $data
-     * @param string $broker_api_url
+     * @param  LaravelSSOBroker  $broker
+     * @param  array  $data
+     * @param  string  $broker_api_url
      *
      * @return bool
      */
@@ -102,15 +218,15 @@ class LaravelSSOBroker extends SSOBroker
         // create user on brokers
         $brokers = Broker::all();
 
-        $brokers_registerations = [];
+        $brokers_registration = [];
 
         foreach ($brokers as $broker) {
             if($broker) {
-                $brokers_registerations[] = $broker->makeRequest('POST', 'createUserOnBroker', $data, $broker_api_url);
+                $brokers_registration[] = $broker->makeRequest('POST', 'createUserOnBroker', $data, $broker_api_url);
             }
         }
 
-        $server_registeration[] = $broker->makeRequest('POST', 'createUser', $data);
+        $server_registration[] = $broker->makeRequest('POST', 'createUser', $data);
     }
 
     /**

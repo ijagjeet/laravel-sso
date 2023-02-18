@@ -2,16 +2,259 @@
 
 namespace IJagjeet\LaravelSSO;
 
+use IJagjeet\LaravelSSO\Interfaces\SSOServerInterface;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Session;
-use IJagjeet\SimpleSSO\SSOServer;
 use IJagjeet\LaravelSSO\Resources\UserResource;
-use IJagjeet\SimpleSSO\Exceptions\SSOServerException;
+use IJagjeet\LaravelSSO\Exceptions\SSOServerException;
 
-class LaravelSSOServer extends SSOServer
+class LaravelSSOServer implements SSOServerInterface
 {
+    /**
+     * @var mixed
+     */
+    protected $brokerId;
+
+    /**
+     * Attach user's session to broker's session.
+     *
+     * @param string|null $broker Broker's name/id.
+     * @param string|null $token Token sent from broker.
+     * @param string|null $checksum Calculated broker+token checksum.
+     *
+     * @return string or redirect
+     */
+    public function attach(?string $broker, ?string $token, ?string $checksum)
+    {
+        try {
+            if (!$broker) {
+                $this->fail('No broker id specified.', true);
+            }
+
+            if (!$token) {
+                $this->fail('No token specified.', true);
+            }
+
+            if (!$checksum || $checksum != $this->generateAttachChecksum($broker, $token)) {
+                $this->fail('Invalid checksum.', true);
+            }
+
+            $this->startUserSession();
+            $sessionId = $this->generateSessionId($broker, $token);
+
+            $this->saveBrokerSessionData($sessionId, $this->getSessionData('id'));
+        } catch (SSOServerException $e) {
+            return $this->redirect(null, ['sso_error' => $e->getMessage()]);
+        }
+
+        $this->attachSuccess();
+    }
+
+    /**
+     * @param null|string $username
+     * @param null|string $password
+     *
+     * @return string
+     */
+    public function login(?string $username, ?string $password)
+    {
+        try {
+            $this->startBrokerSession();
+
+            if (!$username || !$password) {
+                $this->fail('No username and/or password provided.');
+            }
+
+            if (!$this->authenticate($username, $password)) {
+                $this->fail('User authentication failed.');
+            }
+        } catch (SSOServerException $e) {
+            return $this->returnJson(['error' => $e->getMessage()]);
+        }
+
+        $this->setSessionData('sso_user', $username);
+
+        return $this->userInfo();
+    }
+
+    /**
+     * Logging user out.
+     *
+     * @return string
+     */
+    public function logout()
+    {
+        try {
+            $this->startBrokerSession();
+            $this->setSessionData('sso_user', null);
+        } catch (SSOServerException $e) {
+            return $this->returnJson(['error' => $e->getMessage()]);
+        }
+
+        return $this->returnJson(['success' => 'User has been successfully logged out.']);
+    }
+
+    /**
+     * Returning user info for the broker.
+     *
+     * @return string
+     */
+    public function userInfo()
+    {
+        try {
+            $this->startBrokerSession();
+
+            $username = $this->getSessionData('sso_user');
+
+            if (!$username) {
+                $this->fail('User not authenticated. Session ID: ' . $this->getSessionData('id'));
+            }
+
+            if (!$user = $this->getUserInfo($username)) {
+                $this->fail('User not found.');
+            }
+            \Log::info('User info');
+            \Log::info($username);
+        } catch (SSOServerException $e) {
+            \Log::info("User info failed: " . $e->getMessage());
+            return $this->returnJson(['error' => $e->getMessage()]);
+        }
+
+        \Log::info('User info user');
+        \Log::info($user);
+
+        return $this->returnUserInfo($user);
+    }
+
+    /**
+     * Resume broker session if saved session id exist.
+     *
+     * @throws SSOServerException
+     *
+     * @return void
+     */
+    protected function startBrokerSession()
+    {
+        if (isset($this->brokerId)) {
+            return;
+        }
+
+        $sessionId = $this->getBrokerSessionId();
+
+        if (!$sessionId) {
+            $this->fail('Missing session key from broker.');
+        }
+
+        $savedSessionId = $this->getBrokerSessionData($sessionId);
+
+        if (!$savedSessionId) {
+            $this->fail('There is no saved session data associated with the broker session id.');
+        }
+
+        $this->startSession($savedSessionId);
+
+        $this->brokerId = $this->validateBrokerSessionId($sessionId);
+    }
+
+    /**
+     * Check if broker session is valid.
+     *
+     * @param string $sessionId Session id from the broker.
+     *
+     * @throws SSOServerException
+     *
+     * @return string
+     */
+    protected function validateBrokerSessionId(string $sessionId)
+    {
+        $matches = null;
+
+        if (!preg_match('/^SSO-(\w*+)-(\w*+)-([a-z0-9]*+)$/', $this->getBrokerSessionId(), $matches)) {
+            $this->fail('Invalid session id');
+        }
+
+        if ($this->generateSessionId($matches[1], $matches[2]) != $sessionId) {
+            $this->fail('Checksum failed: Client IP address may have changed');
+        }
+
+        return $matches[1];
+    }
+
+    /**
+     * Generate session id from session token.
+     *
+     * @param string $brokerId
+     * @param string $token
+     *
+     * @throws SSOServerException
+     *
+     * @return string
+     */
+    protected function generateSessionId(string $brokerId, string $token)
+    {
+        $broker = $this->getBrokerInfo($brokerId);
+
+        if (!$broker) {
+            $this->fail('Provided broker does not exist.');
+        }
+
+        return 'SSO-' . $brokerId . '-' . $token . '-' . hash('sha256', 'session' . $token . $broker['secret']);
+    }
+
+    /**
+     * Generate session id from session token.
+     *
+     * @param string $brokerId
+     * @param string $token
+     *
+     * @throws SSOServerException
+     *
+     * @return string
+     */
+    protected function generateAttachChecksum($brokerId, $token)
+    {
+        $broker = $this->getBrokerInfo($brokerId);
+
+        if (!$broker) {
+            $this->fail('Provided broker does not exist.');
+        }
+
+        return hash('sha256', 'attach' . $token . $broker['secret']);
+    }
+
+    /**
+     * Do things if attaching was successful.
+     *
+     * @return void
+     */
+    protected function attachSuccess()
+    {
+        $this->redirect();
+    }
+
+    /**
+     * If something failed, throw an Exception or redirect.
+     *
+     * @param null|string $message
+     * @param bool $isRedirect
+     * @param null|string $url
+     *
+     * @throws SSOServerException
+     *
+     * @return void
+     */
+    protected function fail(?string $message, bool $isRedirect = false, ?string $url = null)
+    {
+        if (!$isRedirect) {
+            throw new SSOServerException($message);
+        }
+
+        $this->redirect($url, ['sso_error' => $message]);
+    }
+
+
     /**
      * Redirect to provided URL with query string.
      *
@@ -81,7 +324,7 @@ class LaravelSSOServer extends SSOServer
 
         return true;
     }
-    
+
     /**
      * @param null|array $data
      *
@@ -201,7 +444,7 @@ class LaravelSSOServer extends SSOServer
     protected function returnUserInfo($user)
     {
         return json_encode(["data" => $user]);
-        
+
         return new UserResource($user);
     }
 
