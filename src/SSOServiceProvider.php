@@ -44,6 +44,7 @@ class SSOServiceProvider extends ServiceProvider
     public function register()
     {
         $this->app->make('IJagjeet\LaravelSSO\Controllers\ServerController');
+        $this->app->make('IJagjeet\LaravelSSO\Controllers\BrokerController');
     }
 
     /**
@@ -77,5 +78,8 @@ class SSOServiceProvider extends ServiceProvider
         if (config('laravel-sso.type') == 'server') {
             $this->loadRoutesFrom(__DIR__.'/Routes/server.php');
         }
+        //if (config('laravel-sso.type') == 'broker') {
+            $this->loadRoutesFrom(__DIR__.'/Routes/broker.php');
+        //}
     }
 }

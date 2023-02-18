@@ -3,6 +3,7 @@
 namespace IJagjeet\LaravelSSO;
 
 use GuzzleHttp;
+use IJagjeet\LaravelSSO\Models\Broker;
 use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Str;
 use IJagjeet\LaravelSSO\Exceptions\MissingConfigurationException;
@@ -25,14 +26,14 @@ class LaravelSSOBroker extends SSOBroker
      *
      * @return string
      */
-    protected function generateCommandUrl(string $command, array $parameters = [])
+    protected function generateCommandUrl(string $command, array $parameters = [], $url = null)
     {
         $query = '';
         if (!empty($parameters)) {
             $query = '?' . http_build_query($parameters);
         }
 
-        return $this->ssoServerUrl . '/api/sso/' . $command . $query;
+        return ($url ?? $this->ssoServerUrl) . '/api/sso/' . $command . $query;
     }
 
     /**
@@ -87,6 +88,31 @@ class LaravelSSOBroker extends SSOBroker
         Cookie::forget($this->getCookieName());
     }
 
+
+    /**
+     * Register client to SSO server with user credentials.
+     *
+     * @param array $data
+     * @param string $broker_api_url
+     *
+     * @return bool
+     */
+    public function register(LaravelSSOBroker $broker, array $data, string $broker_api_url)
+    {
+        // create user on brokers
+        $brokers = Broker::all();
+
+        $brokers_registerations = [];
+
+        foreach ($brokers as $broker) {
+            if($broker) {
+                $brokers_registerations[] = $broker->makeRequest('POST', 'createUserOnBroker', $data, $broker_api_url);
+            }
+        }
+
+        $server_registeration[] = $broker->makeRequest('POST', 'createUser', $data);
+    }
+
     /**
      * Make request to SSO server.
      *
@@ -96,9 +122,9 @@ class LaravelSSOBroker extends SSOBroker
      *
      * @return array
      */
-    protected function makeRequest(string $method, string $command, array $parameters = [])
+    public function makeRequest(string $method, string $command, array $parameters = [], $url = null)
     {
-        $commandUrl = $this->generateCommandUrl($command);
+        $commandUrl = $this->generateCommandUrl($command, $url);
 
         $headers = [
             'Accept' => 'application/json',
@@ -118,7 +144,9 @@ class LaravelSSOBroker extends SSOBroker
         }
 
         $client = new GuzzleHttp\Client;
+        \Log::info([$method, $commandUrl, $body + ['headers' => $headers]]);
         $response = $client->request($method, $commandUrl, $body + ['headers' => $headers]);
+
 
         return json_decode($response->getBody(), true);
     }

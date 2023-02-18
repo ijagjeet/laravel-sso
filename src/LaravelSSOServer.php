@@ -67,6 +67,8 @@ class LaravelSSOServer extends SSOServer
      */
     protected function authenticate(string $username, string $password)
     {
+        \Log::debug('Authenticating:');
+        \Log::debug([config('laravel-sso.usernameField') => $username, 'password' => $password]);
         if (!Auth::attempt([config('laravel-sso.usernameField') => $username, 'password' => $password])) {
             return false;
         }
@@ -78,6 +80,32 @@ class LaravelSSOServer extends SSOServer
         $this->startSession($savedSessionId);
 
         return true;
+    }
+    
+    /**
+     * @param null|array $data
+     *
+     * @return string
+     */
+    public function register(array $data)
+    {
+        try {
+            $this->startBrokerSession();
+
+            if (!$username || !$password) {
+                $this->fail('No username and/or password provided.');
+            }
+
+            if (!$this->authenticate($username, $password)) {
+                $this->fail('User authentication failed.');
+            }
+        } catch (SSOServerException $e) {
+            return $this->returnJson(['error' => $e->getMessage()]);
+        }
+
+        $this->setSessionData('sso_user', $username);
+
+        return $this->userInfo();
     }
 
     /**
@@ -106,7 +134,9 @@ class LaravelSSOServer extends SSOServer
     protected function checkBrokerUserAuthentication()
     {
         $userInfo = $this->userInfo();
+        \Log::info($userInfo);
         $broker = $this->getBrokerDetail();
+        \Log::info($broker);
         if(!empty($userInfo->id) && !empty($broker)) {
             $brokerUser = config('laravel-sso.brokersUserModel')::where('user_id', $userInfo->id)->where('broker_id', $broker->id)->first();
             if(empty($brokerUser)) {
@@ -170,6 +200,8 @@ class LaravelSSOServer extends SSOServer
      */
     protected function returnUserInfo($user)
     {
+        return json_encode(["data" => $user]);
+        
         return new UserResource($user);
     }
 
