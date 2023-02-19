@@ -50,6 +50,7 @@ return [
      */
 
     'serverUrl' => env('SSO_SERVER_URL', null),
+    'serverSecret' => env('SSO_SERVER_SECRET', null),
     'brokerName' => env('SSO_BROKER_NAME', null),
     'brokerSecret' => env('SSO_BROKER_SECRET', null),
 ];
