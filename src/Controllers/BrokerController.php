@@ -10,16 +10,16 @@ use IJagjeet\LaravelSSO\LaravelSSOServer;
 
 class BrokerController extends BaseController
 {
-    public function createUser($data)
+    public function createUser(Request $request)
     {
+        $data = $request->all();
+
         $userModel = config('laravel-sso.usersModel');
-        $user_exists = $user::where('email', $data['email'])->first();
+        $user_exists = $userModel::where('email', $data['email'])->first();
         if($user_exists){
             return true;
         }
 
-        $status = $userModel::query()->create($data);
-
-        return !!$status;
+        return $userModel::query()->create($data);
     }
 }

@@ -6,6 +6,7 @@ use GuzzleHttp;
 use IJagjeet\LaravelSSO\Interfaces\SSOBrokerInterface;
 use IJagjeet\LaravelSSO\Models\Broker;
 use Illuminate\Support\Facades\Cookie;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use IJagjeet\LaravelSSO\Exceptions\MissingConfigurationException;
 
@@ -105,7 +106,25 @@ class LaravelSSOBroker implements SSOBrokerInterface
     {
         $this->userInfo = $this->makeRequest('POST', 'login', compact('username', 'password'));
 
-        if (!isset($this->userInfo['error']) && isset($this->userInfo['data']['id'])) {
+        if (!isset($this->userInfo->error) && isset($this->userInfo->data->id)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Login client to SSO server with user credentials.
+     *
+     * @param string $email
+     *
+     * @return bool
+     */
+    public function forceLoginByUserEmail(string $email)
+    {
+        $this->userInfo = $this->makeRequest('POST', 'forceLoginByUserEmail', compact('email'));
+
+        if (!isset($this->userInfo->error) && isset($this->userInfo->data->id)) {
             return true;
         }
 
@@ -213,20 +232,9 @@ class LaravelSSOBroker implements SSOBrokerInterface
      *
      * @return bool
      */
-    public function register(LaravelSSOBroker $broker, array $data, string $broker_api_url)
+    public function register(array $data)
     {
-        // create user on brokers
-        $brokers = Broker::all();
-
-        $brokers_registration = [];
-
-        foreach ($brokers as $broker) {
-            if($broker) {
-                $brokers_registration[] = $broker->makeRequest('POST', 'createUserOnBroker', $data, $broker_api_url);
-            }
-        }
-
-        $server_registration[] = $broker->makeRequest('POST', 'createUser', $data);
+        return $this->makeRequest('POST', 'register', $data);
     }
 
     /**
@@ -240,31 +248,27 @@ class LaravelSSOBroker implements SSOBrokerInterface
      */
     public function makeRequest(string $method, string $command, array $parameters = [], $url = null)
     {
-        $commandUrl = $this->generateCommandUrl($command, $url);
+        $commandUrl = $this->generateCommandUrl($command, [], $url);
 
         $headers = [
             'Accept' => 'application/json',
             'Authorization' => 'Bearer '. $this->getSessionId(),
         ];
 
-        switch ($method) {
-            case 'POST':
-                $body = ['form_params' => $parameters];
-                break;
-            case 'GET':
-                $body = ['query' => $parameters];
-                break;
-            default:
-                $body = [];
-                break;
+        if(strtoupper($method) == 'POST'){
+            $response = Http::withHeaders($headers)
+                ->post($commandUrl, $parameters);
+        }else{
+            $response = Http::withHeaders($headers)
+                ->get($commandUrl, $parameters);
         }
 
-        $client = new GuzzleHttp\Client;
-        \Log::info([$method, $commandUrl, $body + ['headers' => $headers]]);
-        $response = $client->request($method, $commandUrl, $body + ['headers' => $headers]);
+        $result = json_decode($response->body());
 
+        // \Log::info("makeRequest:New:");
+        // \Log::info(compact('method', 'result', 'headers', 'commandUrl', 'url' ));
 
-        return json_decode($response->getBody(), true);
+        return $result;
     }
 
     /**

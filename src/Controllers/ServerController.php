@@ -42,6 +42,19 @@ class ServerController extends BaseController
     /**
      * @param Request $request
      * @param LaravelSSOServer $server
+     *
+     * @return mixed
+     */
+    public function forceLoginByUserEmail(Request $request, LaravelSSOServer $server)
+    {
+        return $server->forceLoginByUserEmail(
+            $request->get('email', null)
+        );
+    }
+
+    /**
+     * @param Request $request
+     * @param LaravelSSOServer $server
      * UNUSED
      *
      * @return mixed
@@ -51,22 +64,21 @@ class ServerController extends BaseController
         // Register on brokers their own regster method are called
 
         // create user on server
-        $server_registeration = $server->register($request->all());
-
-        return true;
+        return $server->register($request->all());
     }
 
-    public function createUser($data)
+    public function createUser(Request $request)
     {
+        $data = $request->all();
+
         $userModel = config('laravel-sso.usersModel');
-        $user_exists = $user::where('email', $data['email'])->first();
+        $user_exists = $userModel::where('email', $data['email'])->first();
+
         if($user_exists){
             return true;
         }
 
-        $status = $userModel::query()->create($data);
-
-        return !!$status;
+        return $userModel::query()->create($data);
     }
 
     /**

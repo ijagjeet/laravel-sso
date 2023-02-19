@@ -3,9 +3,11 @@
 namespace IJagjeet\LaravelSSO;
 
 use IJagjeet\LaravelSSO\Interfaces\SSOServerInterface;
+use IJagjeet\LaravelSSO\Models\Broker;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Session;
 use IJagjeet\LaravelSSO\Resources\UserResource;
 use IJagjeet\LaravelSSO\Exceptions\SSOServerException;
@@ -16,6 +18,16 @@ class LaravelSSOServer implements SSOServerInterface
      * @var mixed
      */
     protected $brokerId;
+
+    protected $ssoServerUrl;
+
+    protected $serverSecret;
+
+    public function __construct()
+    {
+        $this->ssoServerUrl = config('laravel-sso.serverUrl', null);
+        $this->serverSecret = config('laravel-sso.serverSecret', null);
+    }
 
     /**
      * Attach user's session to broker's session.
@@ -75,6 +87,45 @@ class LaravelSSOServer implements SSOServerInterface
         }
 
         $this->setSessionData('sso_user', $username);
+
+        return $this->userInfo();
+    }
+
+    /**
+     * @param null|string $email
+     *
+     * @return string
+     */
+    public function forceLoginByUserEmail(?string $email)
+    {
+        try {
+            $this->startBrokerSession();
+
+            if (!$email) {
+                $this->fail('No email provided.');
+            }
+
+            // \Log::debug("Authenticating:forceLoginByUserEmail:$email");
+
+            $userModel = config('laravel-sso.usersModel');
+            $user = $userModel::where('email', $email)->first();
+
+            if (!$user) {
+                $this->fail('No user exists.');
+            }
+
+            Auth::login($user);
+
+            // After authentication Laravel will change session id, but we need to keep
+            // this the same because this session id can be already attached to other brokers.
+            $sessionId = $this->getBrokerSessionId();
+            $savedSessionId = $this->getBrokerSessionData($sessionId);
+            $this->startSession($savedSessionId);
+        } catch (SSOServerException $e) {
+            return $this->returnJson(['error' => $e->getMessage()]);
+        }
+
+        $this->setSessionData('sso_user', $email);
 
         return $this->userInfo();
     }
@@ -332,33 +383,81 @@ class LaravelSSOServer implements SSOServerInterface
      */
     public function register(array $data)
     {
-        try {
-            $this->startBrokerSession();
+        // \Log::debug("Registering user data from broker to server");
 
-            if (!$username || !$password) {
-                $this->fail('No username and/or password provided.');
-            }
+        $brokers = Broker::all();
 
-            if (!$this->authenticate($username, $password)) {
-                $this->fail('User authentication failed.');
-            }
-        } catch (SSOServerException $e) {
-            return $this->returnJson(['error' => $e->getMessage()]);
+        $brokers_registration = [];
+
+        // create user on server
+        $brokers_registration[] = $this->makeRequest('POST', 'createUserOnServer', $data);
+
+        // create user on brokers
+        foreach ($brokers as $broker) {
+            $brokers_registration[] = $this->makeRequest('POST', 'createUserOnBroker', $data, $broker->api_url);
         }
 
-        $this->setSessionData('sso_user', $username);
+        return $brokers_registration;
+    }
 
-        return $this->userInfo();
+    /**
+     * Make request to SSO server.
+     *
+     * @param string $method Request method 'post' or 'get'.
+     * @param string $command Request command name.
+     * @param array $parameters Parameters for URL query string if GET request and form parameters if it's POST request.
+     *
+     * @return array
+     */
+    public function makeRequest(string $method, string $command, array $parameters = [], $url = null)
+    {
+        $url = $this->generateCommandUrl($command, [], $url);
+
+        $headers = [
+            'Accept' => 'application/json',
+            'Authorization' => 'Bearer '. $this->serverSecret,
+        ];
+
+        if(strtoupper($method) == 'POST'){
+            $response = Http::withHeaders($headers)->post($url, $parameters);
+        }else{
+            $response = Http::withHeaders($headers)->get($url, $parameters);
+        }
+
+        $result = json_decode($response->body());
+
+        // \Log::info("makeRequestFromServer:");
+        // \Log::info(compact('method', 'result', 'headers', 'url' ));
+
+        return $result;
+    }
+
+    /**
+     * Generate request url.
+     *
+     * @param  string  $command
+     * @param  array  $parameters
+     * @param  null  $url
+     * @return string
+     */
+    protected function generateCommandUrl(string $command, array $parameters = [], $url = null)
+    {
+        $query = '';
+        if (!empty($parameters)) {
+            $query = '?' . http_build_query($parameters);
+        }
+
+        return ($url ?? $this->ssoServerUrl) . '/api/sso/' . $command . $query;
     }
 
     /**
      * Get the secret key and other info of a broker
      *
-     * @param string $brokerId
+     * @param  string|null  $brokerId
      *
      * @return null|array
      */
-    protected function getBrokerInfo(string $brokerId)
+    protected function getBrokerInfo(?string $brokerId)
     {
         try {
             $broker = config('laravel-sso.brokersModel')::where('name', $brokerId)->firstOrFail();
@@ -377,9 +476,7 @@ class LaravelSSOServer implements SSOServerInterface
     protected function checkBrokerUserAuthentication()
     {
         $userInfo = $this->userInfo();
-        \Log::info($userInfo);
         $broker = $this->getBrokerDetail();
-        \Log::info($broker);
         if(!empty($userInfo->id) && !empty($broker)) {
             $brokerUser = config('laravel-sso.brokersUserModel')::where('user_id', $userInfo->id)->where('broker_id', $broker->id)->first();
             if(empty($brokerUser)) {
@@ -409,7 +506,7 @@ class LaravelSSOServer implements SSOServerInterface
     /**
      * Returning the broker details
      *
-     * @return string
+     * @return array
      */
     public function getBrokerDetail()
     {

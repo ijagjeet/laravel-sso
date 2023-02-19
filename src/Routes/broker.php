@@ -5,5 +5,5 @@
  */
 
 Route::middleware('api')->prefix('api/sso')->group(function () {
-    Route::get('createUserOnBroker', 'IJagjeet\LaravelSSO\Controllers\BrokerController@createUser');
+    Route::post('createUserOnBroker', 'IJagjeet\LaravelSSO\Controllers\BrokerController@createUser');
 });
