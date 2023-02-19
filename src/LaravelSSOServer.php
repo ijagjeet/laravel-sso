@@ -180,6 +180,36 @@ class LaravelSSOServer implements SSOServerInterface
     }
 
     /**
+     * @param null|array $data
+     *
+     * @return string
+     */
+    public function userInfoUpdate(array $data)
+    {
+        $result = [];
+
+        // create user on server
+        $this->startBrokerSession();
+        $username = $this->getSessionData('sso_user');
+        $userModel = config('laravel-sso.usersModel');
+        $user = $userModel::where('email', $username)->first();
+
+        if($user){
+            $user->update($data);
+        }
+
+        $result[] = $user;
+
+        // update user on brokers
+        $brokers = Broker::all();
+        foreach ($brokers as $broker) {
+            $result[] = $this->makeRequest('POST', 'updateUserOnBroker', $data, $broker->api_url);
+        }
+
+        return $result;
+    }
+
+    /**
      * Resume broker session if saved session id exist.
      *
      * @throws SSOServerException
@@ -387,17 +417,17 @@ class LaravelSSOServer implements SSOServerInterface
 
         $brokers = Broker::all();
 
-        $brokers_registration = [];
+        $result = [];
 
         // create user on server
-        $brokers_registration[] = $this->makeRequest('POST', 'createUserOnServer', $data);
+        $result[] = $this->makeRequest('POST', 'createUserOnServer', $data);
 
         // create user on brokers
         foreach ($brokers as $broker) {
-            $brokers_registration[] = $this->makeRequest('POST', 'createUserOnBroker', $data, $broker->api_url);
+            $result[] = $this->makeRequest('POST', 'createUserOnBroker', $data, $broker->api_url);
         }
 
-        return $brokers_registration;
+        return $result;
     }
 
     /**

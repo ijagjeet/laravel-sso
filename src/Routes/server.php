@@ -11,5 +11,6 @@ Route::middleware('api')->prefix('api/sso')->group(function () {
     Route::post('logout', 'IJagjeet\LaravelSSO\Controllers\ServerController@logout');
     Route::get('attach', 'IJagjeet\LaravelSSO\Controllers\ServerController@attach');
     Route::get('userInfo', 'IJagjeet\LaravelSSO\Controllers\ServerController@userInfo');
+    Route::post('userInfoUpdate', 'IJagjeet\LaravelSSO\Controllers\ServerController@userInfoUpdate');
     Route::post('createUserOnServer', 'IJagjeet\LaravelSSO\Controllers\ServerController@createUser');
 });

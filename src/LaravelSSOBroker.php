@@ -132,6 +132,24 @@ class LaravelSSOBroker implements SSOBrokerInterface
     }
 
     /**
+     * Update user details to SSO server with user credentials.
+     *
+     * @param array $data
+     *
+     * @return bool
+     */
+    public function userInfoUpdate(array $data)
+    {
+        $this->userInfo = $this->makeRequest('POST', 'userInfoUpdate', $data);
+
+        if (!isset($this->userInfo->error) && isset($this->userInfo->data->id)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
      * Logout client from SSO server.
      *
      * @return void

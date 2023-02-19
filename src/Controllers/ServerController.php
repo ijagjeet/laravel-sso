@@ -55,7 +55,7 @@ class ServerController extends BaseController
     /**
      * @param Request $request
      * @param LaravelSSOServer $server
-     * UNUSED
+     *
      *
      * @return mixed
      */
@@ -99,5 +99,21 @@ class ServerController extends BaseController
     public function userInfo(LaravelSSOServer $server)
     {
         return $server->checkUserApplicationAuth();
+    }
+
+
+    /**
+     * @param Request $request
+     * @param LaravelSSOServer $server
+     *
+     *
+     * @return mixed
+     */
+    public function userInfoUpdate(Request $request, LaravelSSOServer $server)
+    {
+        // Register on brokers their own regster method are called
+
+        // create user on server
+        return $server->userInfoUpdate($request->all());
     }
 }
