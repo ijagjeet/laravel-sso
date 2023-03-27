@@ -180,9 +180,10 @@ class LaravelSSOServer implements SSOServerInterface
     }
 
     /**
-     * @param null|array $data
+     * @param  null|array  $data
      *
-     * @return string
+     * @return array
+     * @throws SSOServerException
      */
     public function userInfoUpdate(array $data)
     {
@@ -190,20 +191,20 @@ class LaravelSSOServer implements SSOServerInterface
 
         // create user on server
         $this->startBrokerSession();
-        $username = $this->getSessionData('sso_user');
         $userModel = config('laravel-sso.usersModel');
-        $user = $userModel::where('email', $username)->first();
+        $user = $userModel::where('email', $data["email"])->first();
 
         if($user){
             $user->update($data);
         }
 
-        $result[] = $user;
+        $result["request"] = $data;
+        $result["server"] = $user;
 
         // update user on brokers
         $brokers = Broker::all();
         foreach ($brokers as $broker) {
-            $result[] = $this->makeRequest('POST', 'updateUserOnBroker', $data, $broker->api_url);
+            $result[$broker->api_url] = $this->makeRequest('POST', 'updateUserOnBroker', $data, $broker->api_url);
         }
 
         return $result;

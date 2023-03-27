@@ -54,6 +54,9 @@ class LaravelSSOBroker implements SSOBrokerInterface
      */
     protected $token;
 
+    protected $userInfoUpdateRequest;
+    protected $userInfoUpdateData;
+
 
     public function __construct()
     {
@@ -140,7 +143,8 @@ class LaravelSSOBroker implements SSOBrokerInterface
      */
     public function userInfoUpdate(array $data)
     {
-        $this->userInfo = $this->makeRequest('POST', 'userInfoUpdate', $data);
+        $this->userInfoUpdateRequest = $this->makeRequest('POST', 'userInfoUpdate', $data);
+        $this->userInfoUpdateData = $data;
 
         if (!isset($this->userInfo->error) && isset($this->userInfo->data->id)) {
             return true;

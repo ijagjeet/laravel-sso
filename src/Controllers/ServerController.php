@@ -2,6 +2,7 @@
 
 namespace IJagjeet\LaravelSSO\Controllers;
 
+use IJagjeet\LaravelSSO\Exceptions\SSOServerException;
 use IJagjeet\LaravelSSO\LaravelSSOBroker;
 use IJagjeet\LaravelSSO\Models\Broker;
 use Illuminate\Routing\Controller as BaseController;
@@ -103,15 +104,16 @@ class ServerController extends BaseController
 
 
     /**
-     * @param Request $request
-     * @param LaravelSSOServer $server
+     * @param  Request  $request
+     * @param  LaravelSSOServer  $server
      *
      *
      * @return mixed
+     * @throws SSOServerException
      */
     public function userInfoUpdate(Request $request, LaravelSSOServer $server)
     {
-        // Register on brokers their own regster method are called
+        // Register on brokers their own register method are called
 
         // create user on server
         return $server->userInfoUpdate($request->all());
