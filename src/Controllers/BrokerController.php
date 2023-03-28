@@ -34,6 +34,8 @@ class BrokerController extends BaseController
             return $user;
         }
 
-        return false;
+        return response()->json([
+            "error" => "User not found"
+        ]);
     }
 }

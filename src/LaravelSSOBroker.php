@@ -58,10 +58,12 @@ class LaravelSSOBroker implements SSOBrokerInterface
     protected $userInfoUpdateData;
 
 
-    public function __construct()
+    public function __construct($save_token = true)
     {
         $this->setOptions();
-        $this->saveToken();
+        if($save_token){
+            $this->saveToken();
+        }
     }
 
     /**
@@ -145,12 +147,7 @@ class LaravelSSOBroker implements SSOBrokerInterface
     {
         $this->userInfoUpdateRequest = $this->makeRequest('POST', 'userInfoUpdate', $data);
         $this->userInfoUpdateData = $data;
-
-        if (!isset($this->userInfo->error) && isset($this->userInfo->data->id)) {
-            return true;
-        }
-
-        return false;
+        return $this->userInfoUpdateRequest;
     }
 
     /**
@@ -289,7 +286,7 @@ class LaravelSSOBroker implements SSOBrokerInterface
 
         // \Log::info("makeRequest:New:");
         // \Log::info(compact('method', 'result', 'headers', 'commandUrl', 'url' ));
-
+        // return compact('method', 'result', 'headers', 'commandUrl', 'url' );
         return $result;
     }
 

@@ -7,6 +7,7 @@ use IJagjeet\LaravelSSO\Models\Broker;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Session;
 use IJagjeet\LaravelSSO\Resources\UserResource;
@@ -190,7 +191,6 @@ class LaravelSSOServer implements SSOServerInterface
         $result = [];
 
         // create user on server
-        $this->startBrokerSession();
         $userModel = config('laravel-sso.usersModel');
         $user = $userModel::where('email', $data["email"])->first();
 
@@ -459,7 +459,7 @@ class LaravelSSOServer implements SSOServerInterface
 
         // \Log::info("makeRequestFromServer:");
         // \Log::info(compact('method', 'result', 'headers', 'url' ));
-
+        // return compact('method', 'result', 'headers', 'url', 'command' );
         return $result;
     }
 
